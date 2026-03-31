@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Usage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { cursor: default; -webkit-user-select: none; user-select: none; }
+    canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+    /* ── Settings panel ── */
+    #settings {
+      display: none; position: fixed; inset: 0;
+      background: rgba(14, 14, 18, 0.97);
+      border-radius: 12px; padding: 16px 18px 14px;
+      z-index: 100; flex-direction: column; gap: 0;
+      font-family: 'Press Start 2P', monospace;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+    /* Interactive elements must opt out of drag */
+    #settings button, #settings input, #settings .s-close {
+      -webkit-app-region: no-drag;
+    }
+    #settings.open { display: flex; }
+    /* Light mode overrides for settings panel */
+    #settings.light { background: rgba(240, 238, 235, 0.97); }
+    #settings.light .s-head  { color: #999; }
+    #settings.light .s-label { color: #333; }
+    #settings.light .s-label.dim { color: #bbb; }
+    #settings.light .s-div   { background: #ddd; }
+    #settings.light .s-close { color: #aaa; }
+    #settings.light .s-close:hover { color: #333; }
+    #settings.light .s-color label { color: #333; }
+    #settings.light .tog     { background: #ccc; }
+    #settings.light .tog.on  { background: #4CAF50; }
+    .s-head { font-size: 7px; color: #666; letter-spacing: 1px; margin-bottom: 8px; }
+    .s-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+    .s-label { font-size: 6px; color: #bbb; }
+    .s-label.dim { color: #555; }
+    .s-div { height: 1px; background: #2a2a2e; margin: 5px 0 8px; }
+
+    /* Toggle switch */
+    .tog { width: 34px; height: 16px; background: #2e2e35; border-radius: 8px;
+           position: relative; cursor: pointer; border: none; flex-shrink: 0; transition: background .15s; }
+    .tog.on { background: #4CAF50; }
+    .tog::after { content: ''; position: absolute; width: 12px; height: 12px;
+                  background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: left .15s; }
+    .tog.on::after { left: 20px; }
+
+    /* Color row */
+    .s-color { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+    .s-color label { font-size: 6px; color: #bbb; flex: 1; }
+    .s-color input[type=color] { width: 26px; height: 20px; border: none; padding: 1px 2px;
+                                  background: #222; border-radius: 3px; cursor: pointer; }
+    .s-reset { font-size: 5px; color: #555; background: none; border: none;
+               cursor: pointer; font-family: inherit; }
+    .s-reset:hover { color: #aaa; }
+    .s-close { margin-top: auto; padding-top: 8px; font-size: 6px; color: #555;
+               text-align: center; cursor: pointer; letter-spacing: 1px; }
+    .s-close:hover { color: #ccc; }
+
+    /* ── Context menu ── */
+    #ctxmenu {
+      display: none; position: fixed; background: rgba(18, 18, 22, 0.97);
+      border: 1px solid #333; border-radius: 6px; padding: 4px 0; z-index: 200; min-width: 130px;
+    }
+    #ctxmenu.open { display: block; }
+    .cx { font-family: 'Press Start 2P', monospace; font-size: 6px; color: #ddd;
+          padding: 7px 12px; cursor: pointer; }
+    .cx:hover { background: rgba(255,255,255,.07); }
+    .cd { height: 1px; background: #2a2a2e; margin: 3px 0; }
+  </style>
+</head>
+<body>
+<canvas id="canvas" data-tauri-drag-region></canvas>
+
+<!-- Settings panel -->
+<div id="settings" data-tauri-drag-region>
+  <div class="s-head">SETTINGS</div>
+
+  <div class="s-row">
+    <span class="s-label">LIGHT MODE</span>
+    <button class="tog" id="tog-light" onclick="toggleKey('lightMode')"></button>
+  </div>
+  <div class="s-row">
+    <span class="s-label">STICKY (ALWAYS ON TOP)</span>
+    <button class="tog" id="tog-sticky" onclick="toggleKey('sticky')"></button>
+  </div>
+
+  <div class="s-div"></div>
+  <div class="s-head">VISIBLE METERS</div>
+
+  <div class="s-row">
+    <span class="s-label dim">SESSION (5HR) — always on</span>
+    <span style="font-size:6px;color:#3a3a3a">ON</span>
+  </div>
+  <div class="s-row">
+    <span class="s-label">ALL MODELS (7-DAY)</span>
+    <button class="tog" id="tog-sevenDay" onclick="toggleKey('showSevenDay')"></button>
+  </div>
+  <div class="s-row">
+    <span class="s-label">OPUS (7-DAY)</span>
+    <button class="tog" id="tog-opus" onclick="toggleKey('showOpus')"></button>
+  </div>
+
+  <div class="s-div"></div>
+  <div class="s-head">ACCENT COLOR</div>
+
+  <div class="s-color">
+    <label>HEART &amp; BAR TINT</label>
+    <input type="color" id="color-accent" value="#E74C3C" oninput="setAccent(this.value)" />
+    <button class="s-reset" onclick="clearAccent()">RESET</button>
+  </div>
+
+  <div class="s-close" onclick="closeSettings()">[ CLOSE ]</div>
+</div>
+
+<!-- Context menu -->
+<div id="ctxmenu">
+  <div class="cx" onclick="fetchUsage(); closeCtx()">↻ &nbsp;Refresh Now</div>
+  <div class="cx" onclick="resetPosition(); closeCtx()">⌖ &nbsp;Reset Position</div>
+  <div class="cd"></div>
+  <div class="cx" onclick="openSettings(); closeCtx()">⚙ &nbsp;Settings</div>
+  <div class="cd"></div>
+  <div class="cx" onclick="quitApp()">✕ &nbsp;Quit</div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────
+// Settings (localStorage)
+// ─────────────────────────────────────────────────────────
+const DEFAULTS = {
+  lightMode: false,
+  sticky: false,
+  showSevenDay: true,
+  showOpus: true,
+  accentColor: null,   // null = use pct-based colours
+};
+
+// ID map: settings key → toggle element id
+const TOG_IDS = {
+  lightMode:    'tog-light',
+  sticky:       'tog-sticky',
+  showSevenDay: 'tog-sevenDay',
+  showOpus:     'tog-opus',
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem('cuw-settings');
+    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
+  } catch { return { ...DEFAULTS }; }
+}
+
+function saveSettings() {
+  localStorage.setItem('cuw-settings', JSON.stringify(cfg));
+}
+
+let cfg = loadSettings();
+
+function toggleKey(key) {
+  cfg[key] = !cfg[key];
+  saveSettings();
+  syncToggles();
+  applyExternalEffects();
+  render();
+}
+
+function setAccent(val) {
+  cfg.accentColor = val;
+  saveSettings();
+  render();
+}
+
+function clearAccent() {
+  cfg.accentColor = null;
+  document.getElementById('color-accent').value = '#E74C3C';
+  saveSettings();
+  render();
+}
+
+function syncToggles() {
+  Object.entries(TOG_IDS).forEach(([k, id]) => {
+    document.getElementById(id)?.classList.toggle('on', !!cfg[k]);
+  });
+  if (cfg.accentColor) document.getElementById('color-accent').value = cfg.accentColor;
+  // Keep settings panel in sync with current theme
+  document.getElementById('settings').classList.toggle('light', !!cfg.lightMode);
+}
+
+function applyExternalEffects() {
+  if (window.__TAURI__?.core) {
+    window.__TAURI__.core.invoke('set_sticky', { sticky: cfg.sticky }).catch(() => {});
+  }
+  resizeWindow();
+}
+
+let settingsOpen = false;
+
+async function resizeWindow(h) {
+  // Never collapse to meter height while settings panel is visible
+  if (settingsOpen && h === undefined) return;
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) return;
+  const targetH = h ?? (widgetH());
+  try {
+    const { LogicalSize } = window.__TAURI__.window;
+    await win.setSize(new LogicalSize(320, targetH));
+  } catch {}
+}
+
+function visibleMeterCount() {
+  if (!appState || appState.status !== 'ok') return 1;
+  let n = 0;
+  if (appState.raw?.five_hour != null) n++;
+  if (appState.raw?.seven_day != null && cfg.showSevenDay) n++;
+  if (appState.raw?.seven_day_opus != null && cfg.showOpus) n++;
+  return Math.max(n, 1);
+}
+
+// ─────────────────────────────────────────────────────────
+// Settings panel — position-aware open/close
+// ─────────────────────────────────────────────────────────
+let savedLogY = null;  // logical Y saved before expanding upward
+
+async function openSettings() {
+  settingsOpen = true;
+  syncToggles();
+  document.getElementById('settings').classList.add('open');
+
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) { resizeWindow(SETTINGS_H); return; }
+
+  try {
+    const { LogicalSize, LogicalPosition } = window.__TAURI__.window;
+    const pos     = await win.outerPosition();
+    const monitor = await win.currentMonitor() ?? await win.primaryMonitor();
+    const sf      = monitor?.scaleFactor ?? 1;
+    const logX    = pos.x / sf;
+    const logY    = pos.y / sf;
+    const monTop  = (monitor?.position?.y ?? 0) / sf;
+    const monH    = (monitor?.size?.height ?? 900) / sf;
+    const curH    = widgetH();
+    const spaceBelow = (monTop + monH) - (logY + curH);
+
+    if (spaceBelow >= SETTINGS_H) {
+      // Enough room below — expand downward, keep top edge
+      savedLogY = null;
+      await win.setSize(new LogicalSize(320, SETTINGS_H));
+    } else {
+      // Not enough room below — expand upward, shift top edge up
+      const dy   = SETTINGS_H - curH;
+      const newY = Math.max(monTop, logY - dy);
+      savedLogY  = logY;
+      await win.setPosition(new LogicalPosition(logX, newY));
+      await win.setSize(new LogicalSize(320, SETTINGS_H));
+    }
+  } catch { resizeWindow(SETTINGS_H); }
+}
+
+async function closeSettings() {
+  settingsOpen = false;
+  document.getElementById('settings').classList.remove('open');
+
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) { resizeWindow(); return; }
+
+  try {
+    const { LogicalSize, LogicalPosition } = window.__TAURI__.window;
+    const pos = await win.outerPosition();
+    const monitor = await win.currentMonitor() ?? await win.primaryMonitor();
+    const sf  = monitor?.scaleFactor ?? 1;
+    const logX = pos.x / sf;
+    const targetH = widgetH();
+
+    if (savedLogY !== null) {
+      // Restore original Y before we moved up
+      await win.setPosition(new LogicalPosition(logX, savedLogY));
+      savedLogY = null;
+    }
+    await win.setSize(new LogicalSize(320, targetH));
+  } catch { resizeWindow(); }
+}
+
+// Snap window to bottom-right corner of the current monitor (16px margin)
+async function resetPosition() {
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) return;
+  try {
+    const { LogicalPosition } = window.__TAURI__.window;
+    const monitor = await win.currentMonitor() ?? await win.primaryMonitor();
+    if (!monitor) return;
+    const sf  = monitor.scaleFactor;
+    const mx  = monitor.position.x / sf;
+    const my  = monitor.position.y / sf;
+    const mw  = monitor.size.width  / sf;
+    const mh  = monitor.size.height / sf;
+    const curH = widgetH();
+    const MARGIN = 16;
+    await win.setPosition(new LogicalPosition(mx + mw - 320 - MARGIN, my + mh - curH - MARGIN));
+  } catch {}
+}
+
+// On launch, snap to top-right if the window is fully off-screen
+async function clampOrResetOnLaunch() {
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) return;
+  try {
+    const { LogicalPosition } = window.__TAURI__.window;
+    const pos     = await win.outerPosition();
+    const monitor = await win.currentMonitor() ?? await win.primaryMonitor();
+    if (!monitor) return;
+    const sf = monitor.scaleFactor;
+    const mx = monitor.position.x, my = monitor.position.y;
+    const mw = monitor.size.width,  mh = monitor.size.height;
+    const curH = widgetH();
+    const ww = Math.round(320 * sf), wh = Math.round(curH * sf);
+    const offScreen = pos.x + ww <= mx || pos.x >= mx + mw ||
+                      pos.y + wh <= my || pos.y >= my + mh;
+    if (offScreen) await resetPosition();
+  } catch {}
+}
+
+// Clamp window within screen bounds after a drag ends
+async function clampToScreen() {
+  const win = window.__TAURI__?.window?.getCurrentWindow();
+  if (!win) return;
+  try {
+    const { LogicalPosition } = window.__TAURI__.window;
+    const pos     = await win.outerPosition();
+    const monitor = await win.currentMonitor() ?? await win.primaryMonitor();
+    if (!monitor) return;
+    const sf   = monitor.scaleFactor;
+    const mx   = monitor.position.x, my = monitor.position.y;
+    const mw   = monitor.size.width,  mh = monitor.size.height;
+    const curH = settingsOpen ? SETTINGS_H : widgetH();
+    const ww   = Math.round(320 * sf), wh = Math.round(curH * sf);
+    const cx   = Math.max(mx, Math.min(pos.x, mx + mw - ww));
+    const cy   = Math.max(my, Math.min(pos.y, my + mh - wh));
+    if (cx !== pos.x || cy !== pos.y) {
+      await win.setPosition(new LogicalPosition(cx / sf, cy / sf));
+    }
+  } catch {}
+}
+
+// ─────────────────────────────────────────────────────────
+// Context menu
+// ─────────────────────────────────────────────────────────
+function openCtx(x, y) {
+  const m = document.getElementById('ctxmenu');
+  m.style.left = x + 'px';
+  m.style.top  = y + 'px';
+  m.classList.add('open');
+}
+
+function closeCtx() {
+  document.getElementById('ctxmenu').classList.remove('open');
+}
+
+async function quitApp() {
+  try { await window.__TAURI__.window.getCurrentWindow().close(); } catch {}
+}
+
+// ─────────────────────────────────────────────────────────
+// App state
+// ─────────────────────────────────────────────────────────
+let isRefreshing = false;
+let lastGoodRaw  = null;   // cached last successful API response
+let appState     = { status: 'loading' };
+
+function buildMeters(raw) {
+  const meters = [];
+  if (raw.five_hour != null)
+    meters.push({ label: 'SESSION (5HR)',      pct: Math.round(raw.five_hour.utilization),      resetText: fmtReset(raw.five_hour.resets_at) });
+  if (raw.seven_day != null && cfg.showSevenDay)
+    meters.push({ label: 'ALL MODELS (7-DAY)', pct: Math.round(raw.seven_day.utilization),      resetText: fmtReset(raw.seven_day.resets_at) });
+  if (raw.seven_day_opus != null && cfg.showOpus)
+    meters.push({ label: 'OPUS (7-DAY)',        pct: Math.round(raw.seven_day_opus.utilization), resetText: fmtReset(raw.seven_day_opus.resets_at) });
+  return meters;
+}
+
+// ─────────────────────────────────────────────────────────
+// Tauri IPC — manual refresh only, no auto-polling
+// ─────────────────────────────────────────────────────────
+async function fetchUsage() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+  render(); // immediately show "REFRESHING..." in the button
+
+  try {
+    const raw = await window.__TAURI__.core.invoke('fetch_usage');
+    lastGoodRaw = raw;
+    appState = { status: 'ok', meters: buildMeters(raw), raw };
+    resizeWindow();
+  } catch (err) {
+    // Show cached data with stale indicator, or hard error if no cache
+    appState = lastGoodRaw
+      ? { status: 'ok', meters: buildMeters(lastGoodRaw), raw: lastGoodRaw, stale: true, staleMsg: String(err) }
+      : { status: 'error', message: String(err) };
+  }
+
+  isRefreshing = false;
+  render();
+}
+
+function fmtReset(ts) {
+  if (!ts) return 'No active limit';
+  const reset = new Date(ts);
+  const diff = reset - Date.now();
+  if (diff <= 0) return 'Resetting...';
+  if (diff < 86400000) {
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return `Resets in ${h}h ${m}m`;
+  }
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const hh = reset.getHours(), ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12 = hh % 12 || 12;
+  const mm = String(reset.getMinutes()).padStart(2, '0');
+  return `Resets ${days[reset.getDay()]} ${h12}:${mm} ${ampm}`;
+}
+
+// ─────────────────────────────────────────────────────────
+// Pixel art assets
+// ─────────────────────────────────────────────────────────
+const HEART = [
+  [0,1,1,0,0,1,1,0],
+  [1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1],
+  [0,1,1,1,1,1,1,0],
+  [0,0,1,1,1,1,0,0],
+  [0,0,0,1,1,0,0,0],
+];
+const PS = 3;  // art-pixel → 3×3 canvas px
+const HEART_W = HEART[0].length * PS;   // 24
+const HEART_H = HEART.length    * PS;   // 18
+
+function heartColor(pct) {
+  if (cfg.accentColor) return cfg.accentColor;
+  if (pct < 76) return '#E74C3C';
+  if (pct < 91) return '#E67E22';
+  return '#5A5A5A';
+}
+
+function barColor(pct) {
+  if (cfg.accentColor) return cfg.accentColor;
+  if (pct <= 50) return '#4CAF50';
+  if (pct <= 75) return '#FFC107';
+  if (pct <= 90) return '#FF9800';
+  return '#F44336';
+}
+
+function drawHeart(ctx, x, y, pct) {
+  ctx.fillStyle = heartColor(pct);
+  for (let r = 0; r < HEART.length; r++)
+    for (let c = 0; c < HEART[0].length; c++)
+      if (HEART[r][c]) ctx.fillRect(x + c*PS, y + r*PS, PS, PS);
+}
+
+function drawBar(ctx, x, y, w, h, pct, dark) {
+  const B = 2, iw = w - B*2, ih = h - B*2;
+  ctx.fillStyle = dark ? '#1E1E1E' : '#D0D0D0';
+  ctx.fillRect(x+B, y+B, iw, ih);
+  const fw = Math.round((pct / 100) * iw);
+  if (fw > 0) { ctx.fillStyle = barColor(pct); ctx.fillRect(x+B, y+B, fw, ih); }
+  ctx.fillStyle = dark ? '#000' : '#555';
+  ctx.fillRect(x,       y,       w, B);
+  ctx.fillRect(x,       y+h-B,   w, B);
+  ctx.fillRect(x,       y,       B, h);
+  ctx.fillRect(x+w-B,   y,       B, h);
+}
+
+// Smooth vector cog icon (6 teeth). cx/cy = centre, bgCol punches center hole.
+function drawGear(ctx, cx, cy, col, bgCol) {
+  const teeth = 6, R = 7.5, r = 5.2, hole = 2.2;
+  const step = (Math.PI * 2) / teeth;
+  const tw = step * 0.28;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a = i * step - Math.PI / 2;
+    ctx.arc(cx, cy, r, a - step * 0.5 + tw, a - tw);
+    ctx.arc(cx, cy, R, a - tw, a + tw);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = bgCol;
+  ctx.beginPath();
+  ctx.arc(cx, cy, hole, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawClose(ctx, cx, cy, col) {
+  const s = 4.5;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy - s); ctx.lineTo(cx + s, cy + s);
+  ctx.moveTo(cx + s, cy - s); ctx.lineTo(cx - s, cy + s);
+  ctx.stroke();
+}
+
+function rrPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);   ctx.quadraticCurveTo(x+w, y,   x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);   ctx.quadraticCurveTo(x,   y+h, x,   y+h-r);
+  ctx.lineTo(x, y+r);     ctx.quadraticCurveTo(x,   y,   x+r, y);
+  ctx.closePath();
+}
+
+// ─────────────────────────────────────────────────────────
+// Layout constants
+// ─────────────────────────────────────────────────────────
+const FONT       = "'Press Start 2P', monospace";
+const SANS       = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const PAD_X      = 24;
+const PAD_TOP    = 36;
+const PAD_BOT    = 8;
+const BTN_AREA   = 28;   // height of the refresh button row at the bottom
+const ROW_H      = 58;
+const BAR_W      = 200;
+const BAR_H      = 14;
+const BAR_X      = PAD_X + HEART_W + 8;   // 56
+const SETTINGS_H = 300;  // window height when settings panel is open
+
+// Hit-zones (logical px from edges)
+const GEAR_HIT_W  = 32, GEAR_HIT_H  = 32;
+const CLOSE_HIT_W = 32, CLOSE_HIT_H = 32;
+
+function widgetH() {
+  return PAD_TOP + visibleMeterCount() * ROW_H + BTN_AREA + PAD_BOT;
+}
+
+// ─────────────────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────────────────
+function render() {
+  const cv = document.getElementById('canvas');
+  const dpr = Math.round(window.devicePixelRatio || 1);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.imageSmoothingEnabled = false;
+
+  const dark   = !cfg.lightMode;
+  const bgC    = dark ? `rgba(16,16,20,0.90)` : `rgba(240,238,235,0.90)`;
+  const txtPri = dark ? '#FFFFFF' : '#121212';
+  const txtSec = dark ? '#BBBBBB' : '#444444';
+  const txtDim = dark ? '#888888' : '#666666';
+  const gearC  = dark ? '#777777' : '#555555';
+
+  // Background
+  ctx.fillStyle = bgC;
+  rrPath(ctx, 0, 0, W, H, 12);
+  ctx.fill();
+
+  // Header — 16px from top edge (center y = 20)
+  ctx.fillStyle = txtPri;
+  ctx.font = `7px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.fillText('CLAUDE USAGE', W / 2, 20);
+  ctx.textAlign = 'left';
+
+  // Close (×) — top-left
+  drawClose(ctx, 20, 20, gearC);
+
+  // Gear (⚙) — top-right
+  drawGear(ctx, W - 20, 20, gearC, bgC);
+
+  if (appState.status === 'loading') {
+    centeredLines(ctx, W, H, txtSec, ['Loading...']);
+    return;
+  }
+
+  if (appState.status === 'error') {
+    centeredLines(ctx, W, H, '#E74C3C', ['ERROR', ...wrapText(appState.message, 32)], txtSec);
+    return;
+  }
+
+  // Stale indicator — shown top-left when last fetch failed but we have cached data
+  if (appState.stale) {
+    ctx.fillStyle = '#E67E22';
+    ctx.font = `5px ${FONT}`; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillText('~ RETRYING', PAD_X, 7);
+  }
+
+  appState.meters.forEach((m, i) => {
+    const ry = PAD_TOP + i * ROW_H;
+
+    ctx.fillStyle = appState.stale ? txtDim : txtSec;
+    ctx.font = `6px ${FONT}`; ctx.textBaseline = 'top';
+    ctx.fillText(m.label, PAD_X, ry);
+
+    const hy = ry + 13;
+    drawHeart(ctx, PAD_X, hy, m.pct);
+
+    const by = hy + Math.floor((HEART_H - BAR_H) / 2);
+    drawBar(ctx, BAR_X, by, BAR_W, BAR_H, m.pct, dark);
+
+    ctx.fillStyle = appState.stale ? txtSec : txtPri;
+    ctx.font = `bold 9px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`; ctx.textBaseline = 'middle';
+    ctx.fillText(`${m.pct}%`, BAR_X + BAR_W + 8, by + BAR_H / 2);
+
+    ctx.fillStyle = txtDim; ctx.font = `9px ${SANS}`; ctx.textBaseline = 'top';
+    ctx.fillText(m.resetText, PAD_X, hy + HEART_H + 5);
+  });
+
+  // ── Refresh button ──
+  const divY = H - BTN_AREA - PAD_BOT;
+  ctx.fillStyle = dark ? '#2a2a2e' : '#ddd';
+  ctx.fillRect(PAD_X, divY, W - PAD_X * 2, 1);
+
+  const btnLabel = isRefreshing ? 'REFRESHING...' : '↻  REFRESH';
+  ctx.fillStyle  = isRefreshing ? (dark ? '#555' : '#aaa') : (dark ? '#888' : '#666');
+  ctx.font = `9px ${SANS}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  ctx.fillText(btnLabel, W / 2, divY + BTN_AREA / 2);
+  ctx.textAlign = 'left';
+}
+
+function centeredLines(ctx, W, H, c0, lines, c1) {
+  const lh = 14;
+  let y = (H - lines.length * lh) / 2;
+  lines.forEach((l, i) => {
+    ctx.fillStyle = i === 0 ? c0 : (c1 || c0);
+    ctx.font = `6px ${FONT}`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+    ctx.fillText(l, W / 2, y);
+    y += lh;
+  });
+  ctx.textAlign = 'left';
+}
+
+function wrapText(text, maxChars) {
+  const words = text.split(' '), lines = [];
+  let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > maxChars) { if (cur) lines.push(cur); cur = w; }
+    else cur = (cur + ' ' + w).trim();
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+// ─────────────────────────────────────────────────────────
+// Interactions
+// ─────────────────────────────────────────────────────────
+const cv = document.getElementById('canvas');
+
+// Gear icon click — canvas carries data-tauri-drag-region so Tauri handles
+// dragging natively; we only need to intercept clicks on the gear hit zone.
+cv.addEventListener('click', (e) => {
+  const r = cv.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (x < CLOSE_HIT_W && y < CLOSE_HIT_H) {
+    quitApp();
+    return;
+  }
+  if (x > cv.clientWidth - GEAR_HIT_W && y < GEAR_HIT_H) {
+    openSettings();
+    return;
+  }
+  if (y > cv.clientHeight - BTN_AREA - PAD_BOT) {
+    fetchUsage();
+  }
+});
+
+cv.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  openCtx(e.clientX, e.clientY);
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#ctxmenu')) closeCtx();
+});
+
+// Settings panel — drag from any non-interactive area
+document.getElementById('settings').addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  const tag = e.target.tagName.toLowerCase();
+  if (tag === 'button' || tag === 'input' || tag === 'label') return;
+  window.__TAURI__?.window?.getCurrentWindow()?.startDragging().catch(() => {});
+});
+
+// Clamp to screen after every drag release
+document.addEventListener('mouseup', () => setTimeout(clampToScreen, 80));
+
+// ─────────────────────────────────────────────────────────
+// Re-render whenever the window is physically resized by Tauri
+// ─────────────────────────────────────────────────────────
+new ResizeObserver(() => render()).observe(document.body);
+
+// ─────────────────────────────────────────────────────────
+// Bootstrap
+// ─────────────────────────────────────────────────────────
+render(); // "Loading…" frame
+
+document.fonts.ready.then(() => {
+  syncToggles();
+  applyExternalEffects();
+  render();
+  clampOrResetOnLaunch();
+  fetchUsage();  // self-scheduling via setTimeout with backoff
+});
+</script>
+</body>
+</html>

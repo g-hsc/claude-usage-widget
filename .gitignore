@@ -1,0 +1,31 @@
+# Build artifacts
+target/
+src-tauri/target/
+dist/
+
+# Dependencies
+node_modules/
+
+# macOS
+.DS_Store
+
+# Release bundles (download from GitHub Releases instead)
+*.dmg
+*.app
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# Editor
+*.swp
+*.swo
+.vscode/settings.json
+
+# Tauri
+src-tauri/WixTools/
+src-tauri/gen/schemas/
+
+# Claude Code internal files
+.claude/

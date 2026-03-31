@@ -1,0 +1,17 @@
+{
+  "name": "claude-usage-widget",
+  "version": "0.1.0",
+  "description": "macOS desktop widget showing Claude usage limits as pixel-art health bars",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}
