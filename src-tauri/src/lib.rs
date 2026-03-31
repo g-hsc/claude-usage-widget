@@ -40,7 +40,12 @@ pub struct UsageResponse {
 /// dialogs. The raw token value is never logged or included in error messages.
 fn read_oauth_token() -> Result<String, String> {
     let output = std::process::Command::new("security")
-        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .args([
+            "find-generic-password",
+            "-s",
+            "Claude Code-credentials",
+            "-w",
+        ])
         .output()
         .map_err(|_| "Could not run the `security` CLI command".to_string())?;
 
@@ -125,7 +130,11 @@ fn apply_macos_sticky(window: &tauri::WebviewWindow, sticky: bool) {
     const STICKY_BEHAVIOR: u64 = (1 << 0) | (1 << 4) | (1 << 6);
     const DEFAULT_BEHAVIOR: u64 = 1 << 2; // NSWindowCollectionBehaviorManaged
 
-    let behavior: u64 = if sticky { STICKY_BEHAVIOR } else { DEFAULT_BEHAVIOR };
+    let behavior: u64 = if sticky {
+        STICKY_BEHAVIOR
+    } else {
+        DEFAULT_BEHAVIOR
+    };
     // NSFloatingWindowLevel = 3; kCGNormalWindowLevel = 0
     let level: i64 = if sticky { 3 } else { 0 };
 
